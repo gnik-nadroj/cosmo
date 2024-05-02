@@ -1,15 +1,53 @@
 #include "storage.hpp"
+#include "io_utils.hpp"
+#include <fstream>
+#include <limits>
+#include <memory>
 
 namespace cosmo::io{
-    std::optional<fs::path> Storage::getActiveFilePath() {
-        for (const auto& entry : fs::directory_iterator(_storage_directory)) {
-            if (entry.is_regular_file()) {
-                std::string filename = entry.path().filename().string();
-                if (filename.rfind("active", 0) == 0) {
-                    return entry.path();
-                }
-            }
+    void Storage::setupActiveFile() {
+        auto active_file_path = searchFile(_storage_directory, "active.cosmo");
+
+        if(active_file_path.has_value()) {
+            std::unique_ptr<File, FileStreamDeleter> f {new File(active_file_path->string(), APPEND_READ)};
+            _active_data_file_stream = std::move(f);
+            _active_file_path = active_file_path.value();
+        } else {
+            auto file_path = _storage_directory.path() / "active.cosmo";
+            std::unique_ptr<File, FileStreamDeleter> f {new File(file_path.string(), APPEND_READ)};
+            _active_data_file_stream = std::move(f);
+            _active_file_path = file_path;
         }
-        return std::nullopt;
+    }
+
+    void Storage::setupDataFiles() {
+        _data_files = seachFiles(_storage_directory, "datafile");
+    };
+
+    void Storage::open() {
+        setupActiveFile();
+        setupDataFiles();
+    }
+
+    void Storage::read(int file_id, int pos, size_t size, char* buffer) {
+        if(file_id == ACTIVE_FILE_ID) {
+            _active_data_file_stream->seekg(pos);
+            _active_data_file_stream->read(buffer, size);
+        } else {
+            const auto& data_file = _data_files.at(file_id);
+            File file { data_file, APPEND_READ };
+
+            if(!file.is_open()) {
+                for(int i = 0;i < size; i++) {
+                    buffer[i] = 'Z';
+                }
+                return;
+            }
+
+            file.seekg(pos);
+            file.read(buffer, size);
+
+            file.close();
+        }
     }
 };

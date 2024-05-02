@@ -1,7 +1,12 @@
 #pragma once 
 
+#include "io_utils.hpp"
+
+#include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <optional>
 #include <stdexcept>
 #include <vector>
@@ -30,19 +35,37 @@ namespace cosmo::io {
                 }
 
                 _data_files.reserve(_props._max_non_active_data_file_number);
+
+                open();
             }
 
-            std::optional<fs::path> getActiveFilePath();
+            void open();
 
+            void read(int file_id, int pos, size_t size, char* buffer);
+
+            void write();
+
+            void setupActiveFile();
+
+            void setupDataFiles();
+            
+            const std::vector<fs::path>& getDataFiles() const { return _data_files; };
+            const fs::path& getActiveFilePath() const { return _active_file_path; };
+            
+            bool isActiveFileOpen() const { return _active_data_file_stream->is_open(); };
+
+            using File = std::fstream;
+            using FilePtr = std::unique_ptr<File, FileStreamDeleter>;
+
+            static const auto APPEND_READ = std::ios::app | std::ios::in;
         private:
-            using file = std::fstream;
-
-            static const auto APPEND_READ_WRITE = std::ios::app | std::ios::in | std::ios::out;
-
             StorageOptions _props;
             fs::directory_entry _storage_directory{};
-            std::vector<file> _data_files{};
-            file _active_data_file{};
+            std::vector<fs::path> _data_files{};
+            fs::path _active_file_path {};
+            std::unique_ptr<File, FileStreamDeleter> _active_data_file_stream;
             uint8_t _non_active_data_file_number{};
+
+            static const uint8_t ACTIVE_FILE_ID = 255;
     };
 }
