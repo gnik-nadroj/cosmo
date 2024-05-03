@@ -32,7 +32,8 @@ void testRead(Storage& storage, int fileIndex, int offset, int length, const std
     auto buffer = std::make_unique<char[]>(length + 1);
     auto* rawBuffer = buffer.get();
     rawBuffer[length] = '\0';
-    storage.read(fileIndex, offset, length, rawBuffer);
+    bool status = storage.read(fileIndex, offset, length, rawBuffer);
+    EXPECT_TRUE(status);
     EXPECT_EQ(expected, std::string(rawBuffer));
 }
 
@@ -64,23 +65,6 @@ TEST_F(CosmoTest, dataFilePresent)
 
     EXPECT_EQ(storage.getDataFiles().size(), 3);
 }
-
-/*TEST_F(CosmoTest, multipleDataFile) 
-{
-    std::vector<TemporaryFile> t;
-    t.reserve(1000);
-    for(auto i = 0; i < 1000000; i++) {
-        auto name = "datafile." + std::to_string(i);
-        auto f = TemporaryFile{directory, name};
-        t[i] = std::move(f);
-    }
-
-    Storage storage { directory };
-
-    EXPECT_FALSE(storage.getDataFiles().empty()); 
-
-    EXPECT_EQ(storage.getDataFiles().size(), 1000);
-}*/
 
 TEST_F(CosmoTest, dataFileNotPresent) 
 {
@@ -135,9 +119,9 @@ TEST_F(CosmoTest, multipleFileRead)
 
     Storage storage { directory };
 
-    int file1_id;
-    int file2_id;
-    int file3_id;
+    int file1_id{};
+    int file2_id{};
+    int file3_id{};
 
     for(auto i = 0; i < storage.getDataFiles().size(); ++i) {
         auto& path = storage.getDataFiles().at(i);
@@ -155,3 +139,130 @@ TEST_F(CosmoTest, multipleFileRead)
     testRead(storage, file3_id, 10, 5, "citra");
     testRead(storage, file2_id, 4, 6, "vegeta");
 }
+
+TEST_F(CosmoTest, simpleWrite)
+{
+    Storage storage{ directory };
+
+    std::string value = "Hello, world!";
+
+    auto [writeSuccess, id, pos] = storage.write(value);
+
+    EXPECT_TRUE(writeSuccess);
+
+    EXPECT_EQ(id, 0);
+
+    EXPECT_EQ(pos, 0);
+
+    EXPECT_EQ(storage.getActiveFileInputPosition(), value.size());
+}
+
+TEST_F(CosmoTest, writeEmptyString)
+{
+    Storage storage{ directory };
+
+    std::string value = "";
+
+    auto [writeSuccess, id, pos] = storage.write(value);
+
+    EXPECT_TRUE(writeSuccess);
+
+    EXPECT_EQ(id, 0);
+
+    EXPECT_EQ(pos, 0);
+
+    EXPECT_EQ(storage.getActiveFileInputPosition(), 0);
+}
+
+TEST_F(CosmoTest, writeLargeString)
+{
+    Storage storage{ directory };
+
+    std::string value(1'000'000, 'a');
+
+    auto [writeSuccess, id, pos] = storage.write(value);
+
+    EXPECT_TRUE(writeSuccess);
+
+    EXPECT_EQ(id, 0);
+
+    EXPECT_EQ(pos, 0);
+
+    EXPECT_EQ(storage.getActiveFileInputPosition(), value.size());
+}
+
+TEST_F(CosmoTest, writeSpecialCharacters)
+{
+    Storage storage{ directory };
+
+    std::string value = "Hello, world! 😊👍🌍";
+
+    auto [writeSuccess, id, pos] = storage.write(value);
+
+    EXPECT_TRUE(writeSuccess);
+
+    EXPECT_EQ(id, 0);
+
+    EXPECT_EQ(pos, 0);
+
+    EXPECT_EQ(storage.getActiveFileInputPosition(), value.size());
+}
+
+TEST_F(CosmoTest, writeMultipleValues)
+{
+    Storage storage{ directory };
+
+    std::vector<std::string> values = {
+        "Hello, world! 😊👍🌍",
+        "CosmoTest is great! 🚀🌌",
+        "Multiple writes test! 📝🔄"
+    };
+
+    std::streampos expectedPos = 0;
+
+    for (int i = 0; i < values.size(); ++i) {
+        auto [writeSuccess, id, pos] = storage.write(values[i]);
+
+        EXPECT_TRUE(writeSuccess);
+        EXPECT_EQ(pos, expectedPos);
+
+        expectedPos += values[i].size();
+        EXPECT_EQ(storage.getActiveFileInputPosition(), expectedPos);
+    }
+}
+
+TEST_F(CosmoTest, writeMultipleValuesAndSwitchFile)
+{
+    Storage::data_file_size maxFileSize = 20;
+    Storage storage{ directory, maxFileSize };
+
+    std::vector<std::string> values = {
+        "Hello, world! 😊👍🌍",
+        "CosmoTest is great! 🚀🌌",
+        "Multiple writes test! 📝🔄"
+    };
+
+    std::streampos expectedPos = 0;
+    Storage::data_file_id expectedFileId = 0;
+
+    for (int i = 0; i < values.size(); ++i) {
+        auto [writeSuccess, id, pos] = storage.write(values[i]);
+
+        EXPECT_TRUE(writeSuccess);
+        EXPECT_EQ(pos, expectedPos);
+        EXPECT_EQ(id, expectedFileId);
+
+        expectedPos += values[i].size();
+
+        EXPECT_EQ(storage.getActiveFileInputPosition(), expectedPos);
+
+
+        if (expectedPos >= maxFileSize) {
+            expectedPos = 0;
+            expectedFileId++;
+        } 
+    }
+}
+
+
+

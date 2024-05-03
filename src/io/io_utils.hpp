@@ -17,7 +17,7 @@ namespace cosmo::io {
             FileHandle() = default;
 
             FileHandle(const fs::path& filePath, std::ios_base::openmode mode = APPEND_READ)
-                : _file{filePath, mode}, _filePath{filePath} {
+                : _file{filePath, mode}, _file_path{filePath} {
                 if (!_file.is_open()) {
                     throw std::runtime_error("Unable to open file");
                 }
@@ -28,14 +28,17 @@ namespace cosmo::io {
             }
 
             FileHandle(FileHandle&& other) noexcept
-                : _file(std::move(other._file)) {
+                : _file{ std::move(other._file) }, _file_path{ std::move(other._file_path) } {
                 other._file = std::fstream();
             }
 
             FileHandle& operator=(FileHandle&& other) noexcept {
                 if (this != &other) {
-                    _file.close();
+                    if (_file.is_open()) {
+                        _file.close();
+                    }
 
+                    _file_path = std::move(other._file_path);
                     _file = std::move(other._file);
 
                     other._file = std::fstream();
@@ -51,12 +54,20 @@ namespace cosmo::io {
                 return &_file;
             }
 
+            std::fstream& operator *() {
+                return _file;
+            }
+
+            const fs::path& getPath() const {
+                return _file_path;
+            }
+
             FileHandle(const FileHandle&) = delete;
             FileHandle& operator=(const FileHandle&) = delete;
 
         private:
             std::fstream _file;
-            fs::path _filePath;
+            fs::path _file_path;
     };
 
 

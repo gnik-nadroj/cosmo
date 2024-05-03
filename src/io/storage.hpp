@@ -2,8 +2,6 @@
 
 #include "io_utils.hpp"
 
-#include <algorithm>
-#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -16,47 +14,53 @@ namespace fs = std::filesystem;
 
 namespace cosmo::io {
     class Storage {
-        struct StorageOptions{
-            uint32_t _max_data_file_size {10 * 1024 * 1024};
-            bool _auto_merge {true};
-            uint8_t _max_non_active_data_file_number {5};
-
-            StorageOptions() = default;
-
-            StorageOptions(uint32_t max_data_file_size, bool auto_merge, uint8_t max_non_active_data_file_number) noexcept:
-                _max_data_file_size(max_data_file_size), _auto_merge(auto_merge), _max_non_active_data_file_number(max_non_active_data_file_number)  
-            {}
-        };
-
         public:
-            explicit Storage(const fs::path& directory_path): 
-                _storage_directory{directory_path}{
+            using Offset = std::fstream::pos_type;
+            using data_file_size = uint32_t;
+            using data_file_id = uint8_t;
+
+            explicit Storage(const fs::path& directory_path, data_file_size max_data_file_size = DEFAULT_MAX_DATA_FILE_SIZE):
+                _storage_directory{ directory_path }, _max_data_file_size{ max_data_file_size } {
                 if(!_storage_directory.exists() || !_storage_directory.is_directory()){
                     throw std::invalid_argument("the path provided is not valid");
                 }
 
-                FileHandle f {directory_path / ACTIVE_FILE_NAME};
-                _active_data_file_stream = std::move(f);
-                _data_files.reserve(100);
+                auto active_file_path = directory_path / getActiveFileName();
+                _active_data_file_stream = FileHandle{ active_file_path };
+                _active_file_size = static_cast<data_file_size>(fs::file_size(active_file_path));
                 _data_files = seachFiles(_storage_directory, DATAFILE_PREFIX);
+                _data_files.reserve(DEFAULT_MAX_DATA_FILE_NUMBER);
+                _active_file_id = static_cast<data_file_id>(_data_files.size());
             }
 
-            void read(int file_id, int pos, size_t size, char* buffer);
+            bool read(data_file_id file_id, Offset pos, data_file_size size, char* buffer);
 
-            void write();
+            std::tuple<bool, data_file_id, Offset> write(const std::string& value);
             
             const std::vector<fs::path>& getDataFiles() const { return _data_files; };
+
+            std::streamsize getActiveFileInputPosition() { return _active_data_file_stream->tellg(); };
             
             bool isActiveFileOpen() { return _active_data_file_stream->is_open(); };
-        private:
-            StorageOptions _props;
-            fs::directory_entry _storage_directory;
-            std::vector<fs::path> _data_files;
-            FileHandle _active_data_file_stream;
-            uint8_t _non_active_data_file_number;
 
-            static const uint8_t ACTIVE_FILE_ID = 255;
-            inline static const std::string ACTIVE_FILE_NAME = "activefile";
-            inline static const std::string DATAFILE_PREFIX = "datafile";
+        private:
+            std::string getActiveFileName();
+            std::string getDataFileName(data_file_id id);
+            void switchActiveDataFile();
+
+            fs::directory_entry _storage_directory{};
+            std::vector<fs::path> _data_files{};
+            FileHandle _active_data_file_stream{};
+            data_file_id _active_file_id{};
+            data_file_size _active_file_size{};
+            data_file_size _max_data_file_size{};
+
+            inline static const std::string ACTIVE_FILE_PREFIX{ "activefile" };
+            inline static const std::string DATAFILE_PREFIX{ "datafile" };
+            inline static const std::string FILE_EXTENSION{ ".cosmo" };
+
+            static const data_file_size DEFAULT_MAX_DATA_FILE_SIZE{ 10 * 1024 * 1024 };
+            static const data_file_size DEFAULT_MAX_DATA_FILE_NUMBER{ 255 };
+
     };
 }
