@@ -8,13 +8,31 @@ struct TemporaryFile {
         : filePath(directory / filename) 
     {
         std::ofstream file(filePath);
-        if (!file) {
+        if (!file.is_open()) {
             throw std::runtime_error("Failed to create the file at: " + filePath.string());
         }
+        file.close();
     }
 
     TemporaryFile(const TemporaryFile&) = delete;
     TemporaryFile& operator = (const TemporaryFile&) = delete;
+
+     TemporaryFile(TemporaryFile&& other) noexcept 
+        : filePath(std::move(other.filePath)) 
+    {
+        other.filePath.clear();
+    }
+
+    TemporaryFile& operator=(TemporaryFile&& other) noexcept {
+        if (this != &other) {
+            if(!filePath.empty()) {
+                std::filesystem::remove(filePath);
+            }
+            filePath = std::move(other.filePath);
+            other.filePath.clear();
+        }
+        return *this;
+    }
 
     ~TemporaryFile() {
         std::filesystem::remove(filePath);

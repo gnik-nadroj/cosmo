@@ -2,6 +2,7 @@
 
 #include "io_utils.hpp"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -34,38 +35,28 @@ namespace cosmo::io {
                     throw std::invalid_argument("the path provided is not valid");
                 }
 
-                _data_files.reserve(_props._max_non_active_data_file_number);
-
-                open();
+                FileHandle f {directory_path / ACTIVE_FILE_NAME};
+                _active_data_file_stream = std::move(f);
+                _data_files.reserve(100);
+                _data_files = seachFiles(_storage_directory, DATAFILE_PREFIX);
             }
-
-            void open();
 
             void read(int file_id, int pos, size_t size, char* buffer);
 
             void write();
-
-            void setupActiveFile();
-
-            void setupDataFiles();
             
             const std::vector<fs::path>& getDataFiles() const { return _data_files; };
-            const fs::path& getActiveFilePath() const { return _active_file_path; };
             
-            bool isActiveFileOpen() const { return _active_data_file_stream->is_open(); };
-
-            using File = std::fstream;
-            using FilePtr = std::unique_ptr<File, FileStreamDeleter>;
-
-            static const auto APPEND_READ = std::ios::app | std::ios::in;
+            bool isActiveFileOpen() { return _active_data_file_stream->is_open(); };
         private:
             StorageOptions _props;
-            fs::directory_entry _storage_directory{};
-            std::vector<fs::path> _data_files{};
-            fs::path _active_file_path {};
-            std::unique_ptr<File, FileStreamDeleter> _active_data_file_stream;
-            uint8_t _non_active_data_file_number{};
+            fs::directory_entry _storage_directory;
+            std::vector<fs::path> _data_files;
+            FileHandle _active_data_file_stream;
+            uint8_t _non_active_data_file_number;
 
             static const uint8_t ACTIVE_FILE_ID = 255;
+            inline static const std::string ACTIVE_FILE_NAME = "activefile";
+            inline static const std::string DATAFILE_PREFIX = "datafile";
     };
 }
