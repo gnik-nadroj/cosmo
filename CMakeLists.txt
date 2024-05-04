@@ -12,9 +12,11 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_library(io STATIC src/io/io_utils.cpp src/io/storage.cpp)
 target_include_directories(io PUBLIC src/io)
+target_link_libraries(io PRIVATE fmt::fmt-header-only)
 
 add_library(cosmo src/cosmo.cpp)
-target_link_libraries(cosmo PUBLIC io)
+target_link_libraries(cosmo PRIVATE io)
 target_include_directories(cosmo PUBLIC include)
 
 add_subdirectory(tests)
+add_subdirectory(dependencies/fmt)

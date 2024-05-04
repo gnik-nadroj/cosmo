@@ -4,6 +4,7 @@
 #include <iostream>
 #include <limits>
 #include <memory>
+#include <fmt/format.h>
 #include <stdexcept>
 
 namespace cosmo::io{
@@ -62,12 +63,12 @@ namespace cosmo::io{
     std::string Storage::getActiveFileName() {
         auto now = std::chrono::system_clock::now();
         auto now_c = std::chrono::system_clock::to_time_t(now);
-        return std::format("{}_{}_{}", ACTIVE_FILE_PREFIX, std::to_string(now_c), FILE_EXTENSION);
+        return fmt::format("{}_{}_{}", ACTIVE_FILE_PREFIX, std::to_string(now_c), FILE_EXTENSION);
     }
 
     std::string Storage::getDataFileName(data_file_id id) {
         auto now = std::chrono::system_clock::now();
         auto now_c = std::chrono::system_clock::to_time_t(now);
-        return std::format("{}_{}_{}_{}", DATAFILE_PREFIX, id, std::to_string(now_c), FILE_EXTENSION);
+        return fmt::format("{}_{}_{}_{}", DATAFILE_PREFIX, id, std::to_string(now_c), FILE_EXTENSION);
     }
 };
