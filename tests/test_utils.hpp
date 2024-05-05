@@ -9,7 +9,7 @@ struct TemporaryFile {
     {
         std::ofstream file(filePath);
         if (!file.is_open()) {
-            throw std::runtime_error("Failed to create the file at: " + filePath.string());
+            throw std::invalid_argument("Failed to create the file at: " + filePath.string());
         }
         file.close();
     }

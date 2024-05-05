@@ -28,7 +28,7 @@ public:
     }
 };
 
-void testRead(Storage& storage, int fileIndex, int offset, int length, const std::string& expected) {
+void testRead(Storage& storage, Storage::data_file_id fileIndex, Storage::offset offset, Storage::data_file_size length, const std::string& expected) {
     auto buffer = std::make_unique<char[]>(length + 1);
     auto* rawBuffer = buffer.get();
     rawBuffer[length] = '\0';
@@ -119,19 +119,21 @@ TEST_F(CosmoTest, multipleFileRead)
 
     Storage storage { directory };
 
-    int file1_id{};
-    int file2_id{};
-    int file3_id{};
+    Storage::data_file_id file1_id{};
+    Storage::data_file_id file2_id{};
+    Storage::data_file_id file3_id{};
 
     for(auto i = 0; i < storage.getDataFiles().size(); ++i) {
         auto& path = storage.getDataFiles().at(i);
 
+        auto id = static_cast<Storage::data_file_id>(i);
+
         if(path == file1.filePath) {
-            file1_id = i; 
+            file1_id = id;
         } else if(path == file2.filePath) {
-             file2_id = i;
+             file2_id = id;
         } else {
-            file3_id = i;
+            file3_id = id;
         }
     }
 
@@ -220,13 +222,13 @@ TEST_F(CosmoTest, writeMultipleValues)
 
     std::streampos expectedPos = 0;
 
-    for (int i = 0; i < values.size(); ++i) {
-        auto [writeSuccess, id, pos] = storage.write(values[i]);
+    for (const auto& value : values) {
+        auto [writeSuccess, id, pos] = storage.write(value);
 
         EXPECT_TRUE(writeSuccess);
         EXPECT_EQ(pos, expectedPos);
 
-        expectedPos += values[i].size();
+        expectedPos += value.size();
         EXPECT_EQ(storage.getActiveFileInputPosition(), expectedPos);
     }
 }
@@ -245,14 +247,14 @@ TEST_F(CosmoTest, writeMultipleValuesAndSwitchFile)
     std::streampos expectedPos = 0;
     Storage::data_file_id expectedFileId = 0;
 
-    for (int i = 0; i < values.size(); ++i) {
-        auto [writeSuccess, id, pos] = storage.write(values[i]);
+    for (const auto& value : values) {
+        auto [writeSuccess, id, pos] = storage.write(value);
 
         EXPECT_TRUE(writeSuccess);
         EXPECT_EQ(pos, expectedPos);
         EXPECT_EQ(id, expectedFileId);
 
-        expectedPos += values[i].size();
+        expectedPos += value.size();
 
         EXPECT_EQ(storage.getActiveFileInputPosition(), expectedPos);
 

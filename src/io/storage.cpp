@@ -9,7 +9,7 @@
 
 namespace cosmo::io{
 
-    bool Storage::read(data_file_id file_id, Offset pos, data_file_size size, char* buffer) {
+    bool Storage::read(data_file_id file_id, offset pos, data_file_size size, char* buffer) {
         try {
             if (file_id == _active_file_id) {
                 _active_data_file_stream->seekg(pos);
@@ -31,8 +31,8 @@ namespace cosmo::io{
         return true;
     }
 
-    std::tuple<bool, Storage::data_file_id, Storage::Offset> Storage::write(const std::string& value) {
-        Offset pos;
+    std::tuple<bool, Storage::data_file_id, Storage::offset> Storage::write(const std::string& value) {
+        offset pos;
 
         try {
             switchActiveDataFile();
@@ -60,13 +60,13 @@ namespace cosmo::io{
         }
     }
 
-    std::string Storage::getActiveFileName() {
+    std::string Storage::getActiveFileName() const {
         auto now = std::chrono::system_clock::now();
         auto now_c = std::chrono::system_clock::to_time_t(now);
         return fmt::format("{}_{}_{}", ACTIVE_FILE_PREFIX, std::to_string(now_c), FILE_EXTENSION);
     }
 
-    std::string Storage::getDataFileName(data_file_id id) {
+    std::string Storage::getDataFileName(data_file_id id) const {
         auto now = std::chrono::system_clock::now();
         auto now_c = std::chrono::system_clock::to_time_t(now);
         return fmt::format("{}_{}_{}_{}", DATAFILE_PREFIX, id, std::to_string(now_c), FILE_EXTENSION);

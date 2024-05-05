@@ -15,7 +15,7 @@ namespace fs = std::filesystem;
 namespace cosmo::io {
     class Storage {
         public:
-            using Offset = std::fstream::pos_type;
+            using offset = std::fstream::pos_type;
             using data_file_size = uint32_t;
             using data_file_id = uint8_t;
 
@@ -33,9 +33,9 @@ namespace cosmo::io {
                 _active_file_id = static_cast<data_file_id>(_data_files.size());
             }
 
-            bool read(data_file_id file_id, Offset pos, data_file_size size, char* buffer);
+            bool read(data_file_id file_id, offset pos, data_file_size size, char* buffer);
 
-            std::tuple<bool, data_file_id, Offset> write(const std::string& value);
+            std::tuple<bool, data_file_id, offset> write(const std::string& value);
             
             const std::vector<fs::path>& getDataFiles() const { return _data_files; };
 
@@ -44,8 +44,8 @@ namespace cosmo::io {
             bool isActiveFileOpen() { return _active_data_file_stream->is_open(); };
 
         private:
-            std::string getActiveFileName();
-            std::string getDataFileName(data_file_id id);
+            std::string getActiveFileName() const;
+            std::string getDataFileName(data_file_id id) const;
             void switchActiveDataFile();
 
             fs::directory_entry _storage_directory{};
