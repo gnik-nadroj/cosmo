@@ -10,7 +10,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-add_library(io STATIC src/io/io_utils.cpp src/io/storage.cpp)
+add_library(io STATIC src/io/io_utils.cpp src/io/storage.cpp src/io/storage_io.hpp src/io/basic_storage_io.hpp)
 target_include_directories(io PUBLIC src/io)
 target_link_libraries(io PRIVATE fmt::fmt-header-only)
 

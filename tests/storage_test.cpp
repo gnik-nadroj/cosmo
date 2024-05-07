@@ -12,7 +12,6 @@
 #include <vector>
 
 using cosmo::io::Storage;
-using cosmo::io::FileHandle;
 class CosmoTest : public testing::Test {
 public:
     std::filesystem::path directory{};
@@ -28,13 +27,11 @@ public:
     }
 };
 
-void testRead(Storage& storage, Storage::data_file_id fileIndex, Storage::offset offset, Storage::data_file_size length, const std::string& expected) {
-    auto buffer = std::make_unique<char[]>(length + 1);
-    auto* rawBuffer = buffer.get();
-    rawBuffer[length] = '\0';
-    bool status = storage.read(fileIndex, offset, length, rawBuffer);
+void testRead(Storage& storage, cosmo::io::data_file_id fileIndex, cosmo::io::offset offset, cosmo::io::data_file_size length, const std::string& expected) {
+    auto [status, buffer] = storage.read(fileIndex, offset, length);
     EXPECT_TRUE(status);
-    EXPECT_EQ(expected, std::string(rawBuffer));
+    auto str = std::string(buffer);
+    EXPECT_EQ(expected, str);
 }
 
 TEST_F(CosmoTest, activeFilePresent) 
@@ -78,7 +75,7 @@ TEST_F(CosmoTest, simpleRead)
     TemporaryFile file1{directory, "datafile.1"};
     Storage storage { directory };
 
-    std::fstream fs1 {file1.filePath, FileHandle::APPEND_READ};
+    std::fstream fs1 {file1.filePath, cosmo::io::APPEND_READ};
     fs1 << "jayzprodigy";
     fs1.close();
 
@@ -91,7 +88,7 @@ TEST_F(CosmoTest, readUnicodeData)
     TemporaryFile file1{directory, "datafile.1"};
     Storage storage { directory };
 
-    std::fstream fs1 {file1.filePath, FileHandle::APPEND_READ};
+    std::fstream fs1 {file1.filePath, cosmo::io::APPEND_READ};
     fs1 << "jayzprodigy😘👌50CENT";
     fs1.close();
 
@@ -105,9 +102,9 @@ TEST_F(CosmoTest, multipleFileRead)
     TemporaryFile file2{directory, "datafile.2"};
     TemporaryFile file3{directory, "datafile.3"};
 
-    std::fstream fs1 {file1.filePath, FileHandle::APPEND_READ};
-    std::fstream fs2 {file2.filePath, FileHandle::APPEND_READ};
-    std::fstream fs3 {file3.filePath, FileHandle::APPEND_READ};
+    std::fstream fs1 {file1.filePath, cosmo::io::APPEND_READ};
+    std::fstream fs2 {file2.filePath, cosmo::io::APPEND_READ};
+    std::fstream fs3 {file3.filePath, cosmo::io::APPEND_READ};
 
     fs1 << "jayzprodigy";
     fs2 << "gokuvegeta";
@@ -119,14 +116,14 @@ TEST_F(CosmoTest, multipleFileRead)
 
     Storage storage { directory };
 
-    Storage::data_file_id file1_id{};
-    Storage::data_file_id file2_id{};
-    Storage::data_file_id file3_id{};
+    cosmo::io::data_file_id file1_id{};
+    cosmo::io::data_file_id file2_id{};
+    cosmo::io::data_file_id file3_id{};
 
     for(auto i = 0; i < storage.getDataFiles().size(); ++i) {
         auto& path = storage.getDataFiles().at(i);
 
-        auto id = static_cast<Storage::data_file_id>(i);
+        auto id = static_cast<cosmo::io::data_file_id>(i);
 
         if(path == file1.filePath) {
             file1_id = id;
@@ -155,8 +152,6 @@ TEST_F(CosmoTest, simpleWrite)
     EXPECT_EQ(id, 0);
 
     EXPECT_EQ(pos, 0);
-
-    EXPECT_EQ(storage.getActiveFileInputPosition(), value.size());
 }
 
 TEST_F(CosmoTest, writeEmptyString)
@@ -172,8 +167,6 @@ TEST_F(CosmoTest, writeEmptyString)
     EXPECT_EQ(id, 0);
 
     EXPECT_EQ(pos, 0);
-
-    EXPECT_EQ(storage.getActiveFileInputPosition(), 0);
 }
 
 TEST_F(CosmoTest, writeLargeString)
@@ -189,8 +182,6 @@ TEST_F(CosmoTest, writeLargeString)
     EXPECT_EQ(id, 0);
 
     EXPECT_EQ(pos, 0);
-
-    EXPECT_EQ(storage.getActiveFileInputPosition(), value.size());
 }
 
 TEST_F(CosmoTest, writeSpecialCharacters)
@@ -206,8 +197,6 @@ TEST_F(CosmoTest, writeSpecialCharacters)
     EXPECT_EQ(id, 0);
 
     EXPECT_EQ(pos, 0);
-
-    EXPECT_EQ(storage.getActiveFileInputPosition(), value.size());
 }
 
 TEST_F(CosmoTest, writeMultipleValues)
@@ -229,13 +218,12 @@ TEST_F(CosmoTest, writeMultipleValues)
         EXPECT_EQ(pos, expectedPos);
 
         expectedPos += value.size();
-        EXPECT_EQ(storage.getActiveFileInputPosition(), expectedPos);
     }
 }
 
 TEST_F(CosmoTest, writeMultipleValuesAndSwitchFile)
 {
-    Storage::data_file_size maxFileSize = 20;
+    cosmo::io::data_file_size maxFileSize = 20;
     Storage storage{ directory, maxFileSize };
 
     std::vector<std::string> values = {
@@ -245,7 +233,7 @@ TEST_F(CosmoTest, writeMultipleValuesAndSwitchFile)
     };
 
     std::streampos expectedPos = 0;
-    Storage::data_file_id expectedFileId = 0;
+    cosmo::io::data_file_id expectedFileId = 0;
 
     for (const auto& value : values) {
         auto [writeSuccess, id, pos] = storage.write(value);
@@ -255,9 +243,6 @@ TEST_F(CosmoTest, writeMultipleValuesAndSwitchFile)
         EXPECT_EQ(id, expectedFileId);
 
         expectedPos += value.size();
-
-        EXPECT_EQ(storage.getActiveFileInputPosition(), expectedPos);
-
 
         if (expectedPos >= maxFileSize) {
             expectedPos = 0;

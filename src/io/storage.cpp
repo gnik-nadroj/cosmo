@@ -1,5 +1,7 @@
 #include "storage.hpp"
 #include "io_utils.hpp"
+#include "basic_storage_io.hpp"
+
 #include <fstream>
 #include <iostream>
 #include <limits>
@@ -8,67 +10,52 @@
 #include <stdexcept>
 
 namespace cosmo::io{
+    Storage::Storage(const fs::path& directory_path, data_file_size max_data_file_size):
+        _storage_directory{ directory_path }, _max_data_file_size{ max_data_file_size } {
 
-    bool Storage::read(data_file_id file_id, offset pos, data_file_size size, char* buffer) {
-        try {
-            if (file_id == _active_file_id) {
-                _active_data_file_stream->seekg(pos);
-                _active_data_file_stream->read(buffer, size);
-            }
-            else {
-                const auto& data_file = _data_files.at(file_id);
-                FileHandle file{ data_file };
-
-                file->seekg(pos);
-                file->read(buffer, size);
-            }
-        }
-        catch (const std::exception& e) {
-            std::cerr << "Read operation failed: " << e.what() << '\n';
-            return false;
+        if (!_storage_directory.exists() || !_storage_directory.is_directory()) {
+            throw std::invalid_argument("the path provided is not valid");
         }
 
-        return true;
+        auto existing_data_files = seachFiles(_storage_directory, DATAFILE_PREFIX);
+        std::ranges::copy(existing_data_files, std::back_inserter(_data_files));
+        _active_file_id = static_cast<data_file_id>(_data_files.size());
+
+        _active_file_path = directory_path / getActiveFileName();
+        _active_data_file_stream = UniqueFile{ _active_file_path };
+        _store = std::make_unique<BasicStorageIo>();
+
+        _active_file_size = static_cast<data_file_size>(fs::file_size(_active_file_path));
+        _data_files.reserve(DEFAULT_MAX_DATA_FILE_NUMBER);
     }
 
-    std::tuple<bool, Storage::data_file_id, Storage::offset> Storage::write(const std::string& value) {
-        offset pos;
+    ReadResult Storage::read(data_file_id file_id, offset pos, data_file_size size) {
+        return _store->read(*this, file_id, pos, size);
+    }
 
-        try {
-            switchActiveDataFile();
-            pos = _active_data_file_stream->tellp();
-            _active_data_file_stream->write(value.c_str(), value.size());
-            _active_file_size += static_cast<data_file_size>(value.size());
-        }
-        catch (const std::exception& e) {
-            std::cerr << "Write operation failed: " << e.what() << '\n';
-            return { false, _active_file_id, pos};
-        }
-
-        return { true, _active_file_id, pos };
+    WriteResult Storage::write(const std::string& value) {
+        return _store->write(*this, value);
     }
 
     void Storage::switchActiveDataFile() {
-        if (_active_file_size >= _max_data_file_size) {
-            _active_data_file_stream->close();
-            auto new_data_file_name = _storage_directory.path() / getDataFileName(_active_file_id);
-            fs::rename(_active_data_file_stream.getPath(), new_data_file_name);
-            FileHandle new_active_data_file_stream{ _storage_directory.path() / getActiveFileName() };
-            _active_data_file_stream = std::move(new_active_data_file_stream);
-            _data_files.push_back(new_data_file_name);
+        if (_active_file_size.load() >= _max_data_file_size) {
             _active_file_id++;
+            auto old_active_file_path = std::move(_active_file_path);
+            _active_file_path = _storage_directory.path() / getActiveFileName();
+            std::cout << _active_file_path << " " << old_active_file_path << "\n";
+            UniqueFile new_active_data_file_stream{ _active_file_path };
+            _active_data_file_stream = std::move(new_active_data_file_stream);
+            auto new_data_file_name = _storage_directory.path() / getDataFileName(_active_file_id);
+            _data_files.emplace_back(new_data_file_name);
+            fs::rename(old_active_file_path, new_data_file_name);
         }
     }
 
     std::string Storage::getActiveFileName() const {
-        auto now = std::chrono::system_clock::now();
-        auto now_c = std::chrono::system_clock::to_time_t(now);
-        return fmt::format("{}_{}_{}", ACTIVE_FILE_PREFIX, std::to_string(now_c), FILE_EXTENSION);
+        return fmt::format("{}_{}{}", ACTIVE_FILE_PREFIX, _active_file_id, FILE_EXTENSION);
     }
 
     std::string Storage::getDataFileName(data_file_id id) const {
-        auto now = std::chrono::system_clock::now();
-        auto now_c = std::chrono::system_clock::to_time_t(now);
-        return fmt::format("{}_{}_{}_{}", DATAFILE_PREFIX, id, std::to_string(now_c), FILE_EXTENSION);
+        return fmt::format("{}_{}{}", DATAFILE_PREFIX, id, FILE_EXTENSION);
     }
 };
