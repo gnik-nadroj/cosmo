@@ -9,13 +9,15 @@
 #include <mutex>
 #include <unordered_map>
 #include <iostream>
+#include <shared_mutex>
+#include <functional>
 
 namespace fs = std::filesystem;
 
 namespace cosmo::io {
     using offset = std::fstream::pos_type;
     using data_file_size = uint32_t;
-    using data_file_id = uint8_t;
+    using data_file_id = uint32_t;
 
     using ReadResult = std::pair<bool, char*>;
     using WriteResult = std::tuple<bool, data_file_id, offset>;
@@ -46,20 +48,17 @@ namespace cosmo::io {
     std::vector<fs::path> seachFiles(const fs::directory_entry& directory, const std::string& filename);
     std::unique_ptr<char[]> createNullTerminatedCharArr(std::streamsize size);
 
-
-    class UniqueFile {
+    class ConcurrentFile {
     public:
-        UniqueFile() = default;
+        ConcurrentFile() = default;
 
-        UniqueFile(const fs::path& filePath, std::ios_base::openmode mode = APPEND_READ)
-            : _file{ filePath, mode } {
+        ~ConcurrentFile() = default;
+
+        ConcurrentFile(const fs::path& filePath, std::ios_base::openmode mode = APPEND_READ)
+            : _file{ filePath, mode }, _file_path{ filePath } {
             if (!_file.is_open()) {
                 throw std::invalid_argument("Unable to in file");
             }
-        }
-
-        ~UniqueFile() {
-            _file.close();
         }
 
         bool isOpen() const {
@@ -67,8 +66,8 @@ namespace cosmo::io {
         }
 
         std::pair<bool, char*> read(std::fstream::pos_type offset, std::streamsize size) {
-            return safeIoOperation([&] {
-                auto buffer = createNullTerminatedCharArr(size);
+            return safeIoOperation([this, &size, &offset] {
+                auto buffer = createNullTerminatedCharArr(size); //TODO: Remove allocation, performance and memory issue
                 std::scoped_lock lck{ _mtx };
 
                 if (!_file.is_open()) {
@@ -76,14 +75,19 @@ namespace cosmo::io {
                 }
 
                 _file.seekg(offset);
-                _file.read(buffer.get(), size); //potential bottleneck
+
+                _file.read(buffer.get(), size);
 
                 return buffer.release();
                 });
         }
 
+        const fs::path& getPath() const {
+            return _file_path;
+        }
+
         std::pair<bool, std::fstream::pos_type> write(const char* value, std::streamsize size) {
-            return safeIoOperation([&] {
+            return safeIoOperation([this, &value, &size] {
                 std::scoped_lock lck{ _mtx };
 
                 if (!_file.is_open()) {
@@ -91,104 +95,35 @@ namespace cosmo::io {
                 }
 
                 auto pos = _file.tellp();
-                _file.write(value, size);  //potential bottleneck
+                
+                _file.write(value, size);
 
                 return pos;
                 });
         }
 
-        UniqueFile(const UniqueFile&) = delete;
-        UniqueFile& operator=(const UniqueFile&) = delete;
+        ConcurrentFile(const ConcurrentFile&) = delete;
+        ConcurrentFile& operator=(const ConcurrentFile&) = delete;
 
-        UniqueFile(UniqueFile&& other) noexcept {
+        ConcurrentFile(ConcurrentFile&& other) noexcept {
+            std::scoped_lock lock{ _mtx, other._mtx};
+            _file_path = std::move(other._file_path);
             _file = std::move(other._file);
         }
 
-        UniqueFile& operator=(UniqueFile&& other) noexcept {
+        ConcurrentFile& operator=(ConcurrentFile&& other) noexcept {
             if (this != &other) {
-                std::scoped_lock lock(_mtx, other._mtx);
+                std::scoped_lock lock{ _mtx, other._mtx };
+                _file_path = std::move(other._file_path);
                 _file = std::move(other._file);
             }
             return *this;
         }
 
+
     private:
+        std::fstream _file{};
         std::mutex _mtx;
-        std::fstream _file;
-    };
-
-   /* class SharedFile {
-    public:
-        SharedFile(const fs::path& file_path, std::ios_base::openmode mode = APPEND_READ) : _file_path{ file_path } {
-            std::unique_lock lck{ _mtx };
-            auto& data = _files[_file_path];
-            lck.unlock();
-
-            std::call_once(data.initFlag, [&] {
-                data.file = std::make_shared<UniqueFile>(_file_path, mode);
-                });
-            _file = data.file;
-        }
-
-        SharedFile(const SharedFile&) = default;
-        SharedFile& operator=(const SharedFile&) = default;
-
-        SharedFile(SharedFile&&) = default;
-        SharedFile& operator = (SharedFile&&) = default;
-
-        const fs::path& getPath() const {
-            return _file_path;
-        }
-
-        std::shared_ptr<UniqueFile> operator->() {
-            return _file;
-        }
-
-    private:
-        struct FileData {
-            std::once_flag initFlag;
-            std::shared_ptr<UniqueFile> file;
-        };
-
         fs::path _file_path{};
-        std::shared_ptr<UniqueFile> _file;
-        inline static std::unordered_map<fs::path, FileData> _files{}; // SHOULD MAYBE REPLACED BY A THREAD SAFE MAP TO AVOID LOCKING AT THE CLASS LEVEL
-        inline static std::mutex _mtx;
-    }; */
-
-
-    //TODO: make the class thread safe
-    class SharedFile {
-
-    public:
-        SharedFile(const fs::path& file_path, std::ios_base::openmode mode = APPEND_READ) : _file_path{ file_path } {
-            if (!_files.contains(_file_path)) {
-                UniqueFile f{ _file_path, mode };
-                _files.try_emplace(_file_path, std::move(f));
-            }
-        }
-
-        ~SharedFile() {
-            _files.erase(_file_path);
-        }
-
-        SharedFile(const SharedFile&) = default;
-        SharedFile& operator=(const SharedFile&) = default;
-
-        SharedFile(SharedFile&&) = default;
-        SharedFile& operator = (SharedFile&&) = default;
-
-        const fs::path& getPath() const {
-            return _file_path;
-        }
-
-        UniqueFile* operator->() {
-            return &_files.at(_file_path);
-        }
-
-    private:
-        fs::path _file_path{};
-        inline static std::unordered_map<fs::path, UniqueFile> _files{};
     };
-
 }

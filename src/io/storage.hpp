@@ -24,7 +24,7 @@ namespace cosmo::io {
 
         WriteResult write(const std::string& value);
             
-        const std::vector<fs::path>& getDataFiles() const { return _data_files; };
+        const std::vector<ConcurrentFile>& getDataFiles() const { return _data_files; };
             
         bool isActiveFileOpen() const { return _active_data_file_stream.isOpen(); };
 
@@ -42,9 +42,8 @@ namespace cosmo::io {
         void switchActiveDataFile();
 
         fs::directory_entry _storage_directory{};
-        std::vector<fs::path> _data_files{};
-        fs::path _active_file_path{};
-        UniqueFile _active_data_file_stream{};
+        std::vector<ConcurrentFile> _data_files{};
+        ConcurrentFile _active_data_file_stream{};
         data_file_id _active_file_id{};
         std::atomic<data_file_size> _active_file_size{};
         data_file_size _max_data_file_size{};
@@ -55,8 +54,8 @@ namespace cosmo::io {
         inline static const std::string DATAFILE_PREFIX{ "datafile" };
         inline static const std::string FILE_EXTENSION{ ".cosmo" };
 
-        static const data_file_size DEFAULT_MAX_DATA_FILE_SIZE{ 10 * 1024 * 1024 };
-        static const data_file_size DEFAULT_MAX_DATA_FILE_NUMBER{ 255 };
+        static const data_file_size DEFAULT_MAX_DATA_FILE_SIZE{ 100 * 1024 * 1024 };
+        static const data_file_size DEFAULT_MAX_DATA_FILE_NUMBER{ 4'000 };
 
         friend class BasicStorageIo;
     };

@@ -17,16 +17,15 @@ namespace cosmo::io{
             throw std::invalid_argument("the path provided is not valid");
         }
 
+        _data_files.reserve(DEFAULT_MAX_DATA_FILE_NUMBER);
         auto existing_data_files = seachFiles(_storage_directory, DATAFILE_PREFIX);
         std::ranges::copy(existing_data_files, std::back_inserter(_data_files));
         _active_file_id = static_cast<data_file_id>(_data_files.size());
 
-        _active_file_path = directory_path / getActiveFileName();
-        _active_data_file_stream = UniqueFile{ _active_file_path };
+        _active_data_file_stream = ConcurrentFile{ directory_path / getActiveFileName() };
         _store = std::make_unique<BasicStorageIo>();
 
-        _active_file_size = static_cast<data_file_size>(fs::file_size(_active_file_path));
-        _data_files.reserve(DEFAULT_MAX_DATA_FILE_NUMBER);
+        _active_file_size = static_cast<data_file_size>(fs::file_size(_active_data_file_stream.getPath()));
     }
 
     ReadResult Storage::read(data_file_id file_id, offset pos, data_file_size size) {
@@ -40,14 +39,13 @@ namespace cosmo::io{
     void Storage::switchActiveDataFile() {
         if (_active_file_size.load() >= _max_data_file_size) {
             _active_file_id++;
-            auto old_active_file_path = std::move(_active_file_path);
-            _active_file_path = _storage_directory.path() / getActiveFileName();
-            std::cout << _active_file_path << " " << old_active_file_path << "\n";
-            UniqueFile new_active_data_file_stream{ _active_file_path };
+            auto old_active_file_path = _active_data_file_stream.getPath();
+            ConcurrentFile new_active_data_file_stream{ _storage_directory.path() / getActiveFileName() };
             _active_data_file_stream = std::move(new_active_data_file_stream);
             auto new_data_file_name = _storage_directory.path() / getDataFileName(_active_file_id);
-            _data_files.emplace_back(new_data_file_name);
             fs::rename(old_active_file_path, new_data_file_name);
+            _data_files.emplace_back(new_data_file_name);
+            _active_file_size = 0;
         }
     }
 

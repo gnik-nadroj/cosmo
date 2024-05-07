@@ -1,6 +1,7 @@
 #include <filesystem>
 #include <fstream>
 #include <stdexcept>
+#include <functional>
 
 struct TemporaryFile {
 
@@ -40,5 +41,3 @@ struct TemporaryFile {
 
     std::filesystem::path filePath;
 };
-
-

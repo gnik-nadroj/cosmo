@@ -15,7 +15,7 @@ namespace cosmo::io {
                     return storage._active_data_file_stream.read(pos, size);
                 }
                 else {
-                    return SharedFile{ storage.getDataFiles().at(file_id) }->read(pos, size);
+                    return storage._data_files.at(file_id).read(pos, size);
                 }
             }
 

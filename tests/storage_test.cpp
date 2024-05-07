@@ -10,6 +10,8 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <thread>
+#include <chrono>
 
 using cosmo::io::Storage;
 class CosmoTest : public testing::Test {
@@ -34,7 +36,35 @@ void testRead(Storage& storage, cosmo::io::data_file_id fileIndex, cosmo::io::of
     EXPECT_EQ(expected, str);
 }
 
-TEST_F(CosmoTest, activeFilePresent) 
+void concurrentReadAndWrite(Storage& storage, const std::string& data) {
+    auto writerFunc = [&] {
+        for (int i = 0; i < 100; ++i) {
+            auto [writeSuccess, id, pos] = storage.write(data);
+            EXPECT_TRUE(writeSuccess);
+        }
+        };
+
+    auto readerFunc = [&] {
+        for (int i = 0; i < 100; ++i) {
+            auto [status, buffer] = storage.read(0, 0, data.size());
+            EXPECT_TRUE(status);
+            auto str = std::string(buffer);
+            EXPECT_EQ(data, str);
+        }
+        };
+
+    std::vector<std::jthread> writers;
+    for (int i = 0; i < 10; ++i) {
+        writers.emplace_back(writerFunc);
+    }
+
+    std::vector<std::jthread> readers;
+    for (int i = 0; i < 10; ++i) {
+        readers.emplace_back(readerFunc);
+    }
+}
+
+TEST_F(CosmoTest, activeFilePresent)
 {
     TemporaryFile tempFile(directory, "active.cosmo");
 
@@ -83,6 +113,20 @@ TEST_F(CosmoTest, simpleRead)
     testRead(storage, 0, 4, 7, "prodigy");
 }
 
+TEST_F(CosmoTest, readLargeData)
+{
+    TemporaryFile file1{ directory, "datafile.1" };
+    Storage storage{ directory };
+
+    std::fstream fs1{ file1.filePath, cosmo::io::APPEND_READ };
+    std::string value(1'00000, 'a');
+    fs1 << value;
+    fs1.close();
+
+    testRead(storage, 0, 0, 1'00000, value);
+    testRead(storage, 0, 0, 1'00000, value);
+}
+
 TEST_F(CosmoTest, readUnicodeData) 
 {
     TemporaryFile file1{directory, "datafile.1"};
@@ -125,9 +169,9 @@ TEST_F(CosmoTest, multipleFileRead)
 
         auto id = static_cast<cosmo::io::data_file_id>(i);
 
-        if(path == file1.filePath) {
+        if(path.getPath() == file1.filePath) {
             file1_id = id;
-        } else if(path == file2.filePath) {
+        } else if(path.getPath() == file2.filePath) {
              file2_id = id;
         } else {
             file3_id = id;
@@ -251,6 +295,38 @@ TEST_F(CosmoTest, writeMultipleValuesAndSwitchFile)
             expectedFileId++;
         } 
     }
+}
+
+TEST_F(CosmoTest, ConcurrentReadWriteData) {
+    Storage storage{ directory };
+
+    std::string writeData("hello world 😘");
+
+    auto start = std::chrono::high_resolution_clock::now();
+
+    concurrentReadAndWrite(storage, writeData);
+
+    auto stop = std::chrono::high_resolution_clock::now();
+
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+
+    std::cout << duration.count() << "\n";
+}
+
+TEST_F(CosmoTest, ConcurrentReadWriteLargeData) {
+    Storage storage{ directory };
+
+    std::string writeData(500 * 1024, 'a');
+
+    auto start = std::chrono::high_resolution_clock::now();
+
+    concurrentReadAndWrite(storage, writeData);
+
+    auto stop = std::chrono::high_resolution_clock::now();
+
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+
+    std::cout << duration.count() << "\n";
 }
 
 
