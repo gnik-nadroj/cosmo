@@ -160,6 +160,8 @@ TEST_F(CosmoTest, writeEmptyString)
 
     std::string value = "";
 
+    
+
     auto [writeSuccess, id, pos] = storage.write(value);
 
     EXPECT_TRUE(writeSuccess);
