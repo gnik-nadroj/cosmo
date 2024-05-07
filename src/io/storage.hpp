@@ -3,6 +3,7 @@
 #include "io_utils.hpp"
 #include "storage_io.hpp"
 
+#include <atomic>
 #include <ranges>
 #include <cstdint>
 #include <filesystem>
@@ -45,7 +46,7 @@ namespace cosmo::io {
         fs::path _active_file_path{};
         UniqueFile _active_data_file_stream{};
         data_file_id _active_file_id{};
-        std::atomic_uint32_t _active_file_size{};
+        std::atomic<data_file_size> _active_file_size{};
         data_file_size _max_data_file_size{};
 
         std::unique_ptr<IStorageIo> _store;
