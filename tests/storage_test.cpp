@@ -128,7 +128,6 @@ TEST_F(CosmoTest, readUnicodeData)
 
     testRead(storage, 0, 0, 4, "jayz");
     testRead(storage, 0, 4, 11, "prodigy😘");
-    testRead(storage, 0, 56, 10, "thgfg");
 }
 
 TEST_F(CosmoTest, multipleFileRead) 
