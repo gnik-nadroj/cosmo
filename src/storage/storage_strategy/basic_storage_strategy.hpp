@@ -27,9 +27,10 @@ namespace cosmo::storage {
                 lck.unlock();
 
                 auto [status, pos] = storage._active_data_file_stream.write(value.c_str(), value.size());
-                storage._active_file_size += static_cast<data_file_size>(value.size());
+                auto value_size = status ? static_cast<data_file_size>(value.size()) : 0;
+                storage._active_file_size += value_size;
 
-                return { true, storage._active_file_id, pos }; 
+                return { status, storage._active_file_id, pos }; 
             }
 
         private:
