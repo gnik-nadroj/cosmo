@@ -1,15 +1,15 @@
 #include "storage.hpp"
-#include "io_utils.hpp"
-#include "basic_storage_io.hpp"
+
+
+#include "storage_strategy/basic_storage_strategy.hpp"
 
 #include <fstream>
+#include <fmt/format.h>
 #include <iostream>
 #include <limits>
 #include <memory>
-#include <fmt/format.h>
-#include <stdexcept>
 
-namespace cosmo::io{
+namespace cosmo::storage{
     Storage::Storage(const fs::path& directory_path, data_file_size max_data_file_size):
         _storage_directory{ directory_path }, _max_data_file_size{ max_data_file_size } {
 
@@ -23,7 +23,7 @@ namespace cosmo::io{
         _active_file_id = static_cast<data_file_id>(_data_files.size());
 
         _active_data_file_stream = ConcurrentFile{ directory_path / getActiveFileName() };
-        _store = std::make_unique<BasicStorageIo>();
+        _store = std::make_unique<BasicStorageStrategy>();
 
         _active_file_size = static_cast<data_file_size>(fs::file_size(_active_data_file_stream.getPath()));
     }

@@ -1,4 +1,4 @@
-#include "io_utils.hpp"
+#include <storage_utils.hpp>
 #include "storage.hpp"
 #include "test_utils.hpp"
 
@@ -12,8 +12,10 @@
 #include <vector>
 #include <thread>
 #include <chrono>
+#include <random>
+#include <cstdio>
 
-using cosmo::io::Storage;
+using cosmo::storage::Storage;
 class CosmoTest : public testing::Test {
 public:
     std::filesystem::path directory{};
@@ -29,38 +31,26 @@ public:
     }
 };
 
-void testRead(Storage& storage, cosmo::io::data_file_id fileIndex, cosmo::io::offset offset, cosmo::io::data_file_size length, const std::string& expected) {
+
+void testRead(Storage& storage, cosmo::storage::data_file_id fileIndex, cosmo::storage::offset offset, cosmo::storage::data_file_size length, const std::string& expected) {
     auto [status, buffer] = storage.read(fileIndex, offset, length);
     EXPECT_TRUE(status);
     auto str = std::string(buffer);
     EXPECT_EQ(expected, str);
 }
 
-void concurrentReadAndWrite(Storage& storage, const std::string& data) {
+
+void concurrentWrite(Storage& storage, const std::string& data) {
     auto writerFunc = [&] {
-        for (int i = 0; i < 100; ++i) {
+        for (int i = 0; i < 1000; ++i) {
             auto [writeSuccess, id, pos] = storage.write(data);
             EXPECT_TRUE(writeSuccess);
-        }
-        };
-
-    auto readerFunc = [&] {
-        for (int i = 0; i < 100; ++i) {
-            auto [status, buffer] = storage.read(0, 0, data.size());
-            EXPECT_TRUE(status);
-            auto str = std::string(buffer);
-            EXPECT_EQ(data, str);
         }
         };
 
     std::vector<std::jthread> writers;
     for (int i = 0; i < 10; ++i) {
         writers.emplace_back(writerFunc);
-    }
-
-    std::vector<std::jthread> readers;
-    for (int i = 0; i < 10; ++i) {
-        readers.emplace_back(readerFunc);
     }
 }
 
@@ -105,7 +95,7 @@ TEST_F(CosmoTest, simpleRead)
     TemporaryFile file1{directory, "datafile.1"};
     Storage storage { directory };
 
-    std::fstream fs1 {file1.filePath, cosmo::io::APPEND_READ};
+    std::fstream fs1 {file1.filePath, cosmo::storage::APPEND_READ};
     fs1 << "jayzprodigy";
     fs1.close();
 
@@ -118,13 +108,13 @@ TEST_F(CosmoTest, readLargeData)
     TemporaryFile file1{ directory, "datafile.1" };
     Storage storage{ directory };
 
-    std::fstream fs1{ file1.filePath, cosmo::io::APPEND_READ };
-    std::string value(1'00000, 'a');
+    std::fstream fs1{ file1.filePath, cosmo::storage::APPEND_READ };
+    std::string value(100'000, 'a');
     fs1 << value;
     fs1.close();
 
-    testRead(storage, 0, 0, 1'00000, value);
-    testRead(storage, 0, 0, 1'00000, value);
+    testRead(storage, 0, 0, 100'000, value);
+    testRead(storage, 0, 0, 100'000, value);
 }
 
 TEST_F(CosmoTest, readUnicodeData) 
@@ -132,7 +122,7 @@ TEST_F(CosmoTest, readUnicodeData)
     TemporaryFile file1{directory, "datafile.1"};
     Storage storage { directory };
 
-    std::fstream fs1 {file1.filePath, cosmo::io::APPEND_READ};
+    std::fstream fs1 {file1.filePath, cosmo::storage::APPEND_READ};
     fs1 << "jayzprodigy😘👌50CENT";
     fs1.close();
 
@@ -146,9 +136,9 @@ TEST_F(CosmoTest, multipleFileRead)
     TemporaryFile file2{directory, "datafile.2"};
     TemporaryFile file3{directory, "datafile.3"};
 
-    std::fstream fs1 {file1.filePath, cosmo::io::APPEND_READ};
-    std::fstream fs2 {file2.filePath, cosmo::io::APPEND_READ};
-    std::fstream fs3 {file3.filePath, cosmo::io::APPEND_READ};
+    std::fstream fs1 {file1.filePath, cosmo::storage::APPEND_READ};
+    std::fstream fs2 {file2.filePath, cosmo::storage::APPEND_READ};
+    std::fstream fs3 {file3.filePath, cosmo::storage::APPEND_READ};
 
     fs1 << "jayzprodigy";
     fs2 << "gokuvegeta";
@@ -160,14 +150,14 @@ TEST_F(CosmoTest, multipleFileRead)
 
     Storage storage { directory };
 
-    cosmo::io::data_file_id file1_id{};
-    cosmo::io::data_file_id file2_id{};
-    cosmo::io::data_file_id file3_id{};
+    cosmo::storage::data_file_id file1_id{};
+    cosmo::storage::data_file_id file2_id{};
+    cosmo::storage::data_file_id file3_id{};
 
     for(auto i = 0; i < storage.getDataFiles().size(); ++i) {
         auto& path = storage.getDataFiles().at(i);
 
-        auto id = static_cast<cosmo::io::data_file_id>(i);
+        auto id = static_cast<cosmo::storage::data_file_id>(i);
 
         if(path.getPath() == file1.filePath) {
             file1_id = id;
@@ -203,8 +193,6 @@ TEST_F(CosmoTest, writeEmptyString)
     Storage storage{ directory };
 
     std::string value = "";
-
-    
 
     auto [writeSuccess, id, pos] = storage.write(value);
 
@@ -269,7 +257,7 @@ TEST_F(CosmoTest, writeMultipleValues)
 
 TEST_F(CosmoTest, writeMultipleValuesAndSwitchFile)
 {
-    cosmo::io::data_file_size maxFileSize = 20;
+    cosmo::storage::data_file_size maxFileSize = 20;
     Storage storage{ directory, maxFileSize };
 
     std::vector<std::string> values = {
@@ -279,7 +267,7 @@ TEST_F(CosmoTest, writeMultipleValuesAndSwitchFile)
     };
 
     std::streampos expectedPos = 0;
-    cosmo::io::data_file_id expectedFileId = 0;
+    cosmo::storage::data_file_id expectedFileId = 0;
 
     for (const auto& value : values) {
         auto [writeSuccess, id, pos] = storage.write(value);
@@ -297,37 +285,73 @@ TEST_F(CosmoTest, writeMultipleValuesAndSwitchFile)
     }
 }
 
-TEST_F(CosmoTest, ConcurrentReadWriteData) {
+TEST_F(CosmoTest, SequentialReads) {
+    std::string data(1'000'000, 'a');
+    TemporaryFile file{ directory, "datafile.cosmo" };
+    std::fstream fst{ file.filePath, cosmo::storage::APPEND_READ };
+    fst << data;
+    fst.close();
+
     Storage storage{ directory };
 
-    std::string writeData("hello world 😘");
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dis(0, 256000);
 
-    auto start = std::chrono::high_resolution_clock::now();
-
-    concurrentReadAndWrite(storage, writeData);
-
-    auto stop = std::chrono::high_resolution_clock::now();
-
-    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
-
-    std::cout << duration.count() << "\n";
+    for (int i = 0; i < 10000; ++i) {
+        cosmo::storage::offset offset = dis(gen);
+        cosmo::storage::data_file_size length = dis(gen);
+        std::string expected = data.substr(offset, length);
+        testRead(storage, 0, offset, length, expected);
+    }
 }
 
-TEST_F(CosmoTest, ConcurrentReadWriteLargeData) {
+TEST_F(CosmoTest, ConcurrentReads) {
+    std::string data(1'000'000, 'a');
+    TemporaryFile file{ directory, "datafile.cosmo" };
+    std::fstream fst{ file.filePath, cosmo::storage::APPEND_READ };
+    fst << data;
+    fst.close();
+
     Storage storage{ directory };
 
-    std::string writeData(500 * 1024, 'a');
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dis(0, 256000);
 
-    auto start = std::chrono::high_resolution_clock::now();
+    std::vector<std::thread> threads;
+    for (int i = 0; i < 10; ++i) {
+        threads.push_back(std::thread([&] {
+            for (int j = 0; j < 1000; ++j) {
+                cosmo::storage::offset offset = dis(gen);
+                cosmo::storage::data_file_size length = dis(gen);
+                std::string expected = data.substr(offset, length);
+                testRead(storage, 0, offset, length, expected);
+            }
+            }));
+    }
 
-    concurrentReadAndWrite(storage, writeData);
-
-    auto stop = std::chrono::high_resolution_clock::now();
-
-    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
-
-    std::cout << duration.count() << "\n";
+    for (auto& t : threads) {
+        t.join();
+    }
 }
 
+TEST_F(CosmoTest, ConcurrentWrite256KB) {
+    Storage storage{ directory };
 
+    std::string writeData(256000, 'a');
+
+    concurrentWrite(storage, writeData);
+}
+
+TEST_F(CosmoTest, SequentialWrite256KB) {
+    Storage storage{ directory };
+
+    std::string writeData(256000, 'a');
+
+    for (auto i = 0; i < 10000; ++i) {
+        auto [status, _, _2] = storage.write(writeData);
+        EXPECT_TRUE(status);
+    }
+}
 

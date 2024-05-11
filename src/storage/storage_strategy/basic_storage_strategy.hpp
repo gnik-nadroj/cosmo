@@ -1,12 +1,12 @@
 #pragma once
 
-#include "storage_io.hpp"
+#include "storage_strategy.hpp"
 #include "storage.hpp"
 
 #include <shared_mutex>
 
-namespace cosmo::io {
-    class BasicStorageIo : public IStorageIo {
+namespace cosmo::storage {
+    class BasicStorageStrategy : public IStorageStrategy {
         public:
             ReadResult read(Storage& storage, data_file_id file_id, offset pos, data_file_size size) override {
                 std::shared_lock lck{ _mtx };

@@ -1,7 +1,7 @@
-#include "io_utils.hpp"
+#include "storage_utils.hpp"
 
 
-namespace cosmo::io {
+namespace cosmo::storage {
     std::optional<fs::path> searchFile(const fs::directory_entry& directory, const std::string& filename) {
         for (const auto& entry : fs::directory_iterator(directory)) {
             if (entry.is_regular_file()) {

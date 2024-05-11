@@ -1,7 +1,7 @@
 #pragma once 
 
-#include "io_utils.hpp"
-#include "storage_io.hpp"
+#include "utils/storage_utils.hpp"
+#include "storage_strategy/storage_strategy.hpp"
 
 #include <atomic>
 #include <ranges>
@@ -15,7 +15,7 @@
 
 namespace fs = std::filesystem;
 
-namespace cosmo::io {
+namespace cosmo::storage {
     class Storage {
     public:
         explicit Storage(const fs::path& directory_path, data_file_size max_data_file_size = DEFAULT_MAX_DATA_FILE_SIZE);
@@ -48,7 +48,7 @@ namespace cosmo::io {
         std::atomic<data_file_size> _active_file_size{};
         data_file_size _max_data_file_size{};
 
-        std::unique_ptr<IStorageIo> _store;
+        std::unique_ptr<IStorageStrategy> _store;
 
         inline static const std::string ACTIVE_FILE_PREFIX{ "activefile" };
         inline static const std::string DATAFILE_PREFIX{ "datafile" };
@@ -57,6 +57,6 @@ namespace cosmo::io {
         static const data_file_size DEFAULT_MAX_DATA_FILE_SIZE{ 100 * 1024 * 1024 };
         static const data_file_size DEFAULT_MAX_DATA_FILE_NUMBER{ 4'000 };
 
-        friend class BasicStorageIo;
+        friend class BasicStorageStrategy;
     };
 }

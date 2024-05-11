@@ -11,10 +11,11 @@
 #include <iostream>
 #include <shared_mutex>
 #include <functional>
+#include <atomic>
 
 namespace fs = std::filesystem;
 
-namespace cosmo::io {
+namespace cosmo::storage {
     using offset = std::fstream::pos_type;
     using data_file_size = uint32_t;
     using data_file_id = uint32_t;
@@ -23,6 +24,33 @@ namespace cosmo::io {
     using WriteResult = std::tuple<bool, data_file_id, offset>;
 
     inline static const auto APPEND_READ = std::ios::app | std::ios::in;
+
+
+
+    //HACK: not thread safe. NEED TO MODIFY IT
+    class CharBuffer {
+    private:
+        static inline auto buffer = std::make_unique<char[]>(1'000'000'000);
+        static inline std::streamsize size{ 1'000'000'000 };
+        static inline std::streamsize currentPos{0};
+
+    public:
+        static char* getBuffer(std::streamsize requestedSize) {
+            if (requestedSize > size) {
+                throw std::runtime_error("Requested size is larger than buffer size");
+            }
+
+            if (currentPos + requestedSize >= size) {
+                currentPos = 0;
+            }
+
+            char* start = &buffer[currentPos];
+            buffer[currentPos + requestedSize] = '\0';
+            currentPos += requestedSize + 1;
+
+            return start;
+        }
+    };
 
     template <typename Func, typename ReturnType = std::invoke_result_t<Func>>
     std::pair<bool, ReturnType> safeIoOperation(Func func) {
@@ -67,18 +95,27 @@ namespace cosmo::io {
 
         std::pair<bool, char*> read(std::fstream::pos_type offset, std::streamsize size) {
             return safeIoOperation([this, &size, &offset] {
-                auto buffer = createNullTerminatedCharArr(size); //TODO: Remove allocation, performance and memory issue
                 std::scoped_lock lck{ _mtx };
 
-                if (!_file.is_open()) {
-                    throw std::ios::failure("the file have been closed by another thread");
-                }
+                auto buffer = CharBuffer::getBuffer(size);
+
+                //TODO: trying to limit contention
+                // 
+                //unlock
+                //
+                //create the packaged_task
+                //
+                //get the future
+                //
+                //push into the lock free queue
+                //
+                //wait for the response
 
                 _file.seekg(offset);
 
-                _file.read(buffer.get(), size);
+                _file.read(buffer, size);
 
-                return buffer.release();
+                return buffer;
                 });
         }
 
@@ -90,9 +127,16 @@ namespace cosmo::io {
             return safeIoOperation([this, &value, &size] {
                 std::scoped_lock lck{ _mtx };
 
-                if (!_file.is_open()) {
-                    throw std::ios::failure("the file have been closed by another thread");
-                }
+                //TODO: trying to limit contention
+                //create the packaged_task
+                //
+                //get the future
+                //
+                //push into the lock free queue
+                //
+                //unlock
+                //
+                //wait for the response
 
                 auto pos = _file.tellp();
                 
