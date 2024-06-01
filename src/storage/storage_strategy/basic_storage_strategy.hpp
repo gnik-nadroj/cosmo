@@ -22,7 +22,11 @@ namespace cosmo::storage {
             WriteResult write(Storage& storage, const std::string& value) override {
                 std::unique_lock lck{ _mtx };
 
-                storage.switchActiveDataFile();
+                if (storage._active_file_size.load() >= storage._max_data_file_size) {
+                    storage._active_file_id++;
+                    storage.switchActiveDataFile();
+                    storage._active_file_size = 0;
+                }
 
                 lck.unlock();
 

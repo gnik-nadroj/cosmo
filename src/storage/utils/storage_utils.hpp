@@ -25,28 +25,31 @@ namespace cosmo::storage {
 
     inline static const auto APPEND_READ = std::ios::app | std::ios::in;
 
+    std::optional<fs::path> searchFile(const fs::directory_entry& directory, const std::string_view filename);
+    std::vector<fs::path> seachFiles(const fs::directory_entry& directory, const std::string_view filename);
 
-
-    //HACK: not thread safe. NEED TO MODIFY IT
     class CharBuffer {
     private:
-        static inline auto buffer = std::make_unique<char[]>(1'000'000'000);
-        static inline std::streamsize size{ 1'000'000'000 };
-        static inline std::streamsize currentPos{0};
+        static inline std::mutex _mtx;
+        static inline size_t _size{ 1'000'000'000 };
+        static inline size_t _current_pos{};
+        static inline auto _buffer = std::make_unique<char[]>(_size);
 
     public:
         static char* getBuffer(std::streamsize requestedSize) {
-            if (requestedSize > size) {
+            std::scoped_lock lck{ _mtx };
+
+            if (requestedSize > _size) {
                 throw std::runtime_error("Requested size is larger than buffer size");
             }
 
-            if (currentPos + requestedSize >= size) {
-                currentPos = 0;
+            if (_current_pos + requestedSize >= _size) {
+                _current_pos = 0;
             }
 
-            char* start = &buffer[currentPos];
-            buffer[currentPos + requestedSize] = '\0';
-            currentPos += requestedSize + 1;
+            char* start = &_buffer[_current_pos];
+            _buffer[_current_pos + requestedSize] = '\0';
+            _current_pos += requestedSize + 1;
 
             return start;
         }
@@ -72,102 +75,74 @@ namespace cosmo::storage {
         return { false, ReturnType{} };
     }
 
-    std::optional<fs::path> searchFile(const fs::directory_entry& directory, const std::string& filename);
-    std::vector<fs::path> seachFiles(const fs::directory_entry& directory, const std::string& filename);
-    std::unique_ptr<char[]> createNullTerminatedCharArr(std::streamsize size);
-
     class ConcurrentFile {
     public:
         ConcurrentFile() = default;
 
         ~ConcurrentFile() = default;
 
+        ConcurrentFile(const ConcurrentFile&) = delete;
+        ConcurrentFile& operator=(const ConcurrentFile&) = delete;
+
         ConcurrentFile(const fs::path& filePath, std::ios_base::openmode mode = APPEND_READ)
-            : _file{ filePath, mode }, _file_path{ filePath } {
-            if (!_file.is_open()) {
+            : _writer{ filePath, mode }, _file_path{ filePath } {
+            if (!_writer.is_open()) {
                 throw std::invalid_argument("Unable to in file");
             }
         }
 
-        bool isOpen() const {
-            return _file.is_open();
+        ConcurrentFile(ConcurrentFile&& other) noexcept {
+            std::scoped_lock lock{ _write_mtx, other._write_mtx };
+            _file_path = std::move(other._file_path);
+            _writer = std::move(other._writer);
         }
 
-        std::pair<bool, char*> read(std::fstream::pos_type offset, std::streamsize size) {
-            return safeIoOperation([this, &size, &offset] {
-                std::scoped_lock lck{ _mtx };
+        ConcurrentFile& operator=(ConcurrentFile&& other) noexcept {
+            if (this != &other) {
+                std::scoped_lock lock{ _write_mtx, other._write_mtx };
+                _file_path = std::move(other._file_path);
+                _writer = std::move(other._writer);
+            }
+            return *this;
+        }
 
+        std::pair<bool, char*> read(std::fstream::pos_type offset, std::streamsize size) const {
+            return safeIoOperation([this, &size, &offset] {
                 auto buffer = CharBuffer::getBuffer(size);
 
-                //TODO: trying to limit contention
-                // 
-                //unlock
-                //
-                //create the packaged_task
-                //
-                //get the future
-                //
-                //push into the lock free queue
-                //
-                //wait for the response
+                std::ifstream reader {_file_path, std::ios::in};
 
-                _file.seekg(offset);
+                reader.seekg(offset);
 
-                _file.read(buffer, size);
+                reader.read(buffer, size);
 
                 return buffer;
-                });
+            });
+        }
+
+        std::pair<bool, std::fstream::pos_type> write(const char* value, std::streamsize size) {
+            return safeIoOperation([this, &value, &size] {
+                std::scoped_lock lck{ _write_mtx };
+
+                auto pos = _writer.tellp();
+                
+                _writer.write(value, size);
+
+                return pos;
+            });
+        }
+
+        bool isOpen() const {
+            return _writer.is_open();
         }
 
         const fs::path& getPath() const {
             return _file_path;
         }
 
-        std::pair<bool, std::fstream::pos_type> write(const char* value, std::streamsize size) {
-            return safeIoOperation([this, &value, &size] {
-                std::scoped_lock lck{ _mtx };
-
-                //TODO: trying to limit contention
-                //create the packaged_task
-                //
-                //get the future
-                //
-                //push into the lock free queue
-                //
-                //unlock
-                //
-                //wait for the response
-
-                auto pos = _file.tellp();
-                
-                _file.write(value, size);
-
-                return pos;
-                });
-        }
-
-        ConcurrentFile(const ConcurrentFile&) = delete;
-        ConcurrentFile& operator=(const ConcurrentFile&) = delete;
-
-        ConcurrentFile(ConcurrentFile&& other) noexcept {
-            std::scoped_lock lock{ _mtx, other._mtx};
-            _file_path = std::move(other._file_path);
-            _file = std::move(other._file);
-        }
-
-        ConcurrentFile& operator=(ConcurrentFile&& other) noexcept {
-            if (this != &other) {
-                std::scoped_lock lock{ _mtx, other._mtx };
-                _file_path = std::move(other._file_path);
-                _file = std::move(other._file);
-            }
-            return *this;
-        }
-
-
     private:
-        std::fstream _file{};
-        std::mutex _mtx;
+        std::fstream _writer{};
+        std::mutex _write_mtx;
         fs::path _file_path{};
     };
 }

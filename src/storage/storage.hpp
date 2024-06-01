@@ -54,9 +54,10 @@ namespace cosmo::storage {
         inline static const std::string DATAFILE_PREFIX{ "datafile" };
         inline static const std::string FILE_EXTENSION{ ".cosmo" };
 
-        static const data_file_size DEFAULT_MAX_DATA_FILE_SIZE{ 100 * 1024 * 1024 };
+        static const data_file_size DEFAULT_MAX_DATA_FILE_SIZE{ 1'000'000'000 };
         static const data_file_size DEFAULT_MAX_DATA_FILE_NUMBER{ 4'000 };
 
         friend class BasicStorageStrategy;
+        friend class BufferedStorageStrategy;
     };
 }

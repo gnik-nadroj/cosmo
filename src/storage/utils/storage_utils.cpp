@@ -1,8 +1,10 @@
 #include "storage_utils.hpp"
 
+#include <string_view>
+
 
 namespace cosmo::storage {
-    std::optional<fs::path> searchFile(const fs::directory_entry& directory, const std::string& filename) {
+    std::optional<fs::path> searchFile(const fs::directory_entry& directory, const std::string_view filename) {
         for (const auto& entry : fs::directory_iterator(directory)) {
             if (entry.is_regular_file()) {
                 std::string directory_file = entry.path().filename().string();
@@ -14,7 +16,7 @@ namespace cosmo::storage {
         return std::nullopt;
     }
 
-    std::vector<fs::path> seachFiles(const fs::directory_entry& directory, const std::string& filename) {
+    std::vector<fs::path> seachFiles(const fs::directory_entry& directory, const std::string_view filename) {
         std::vector<fs::path> files{};
         for (const auto& entry : fs::directory_iterator(directory)) {
             if (entry.is_regular_file()) {
@@ -26,14 +28,5 @@ namespace cosmo::storage {
         }
 
         return files;
-    }
-
-    std::unique_ptr<char[]> createNullTerminatedCharArr(std::streamsize size)
-    {
-        auto buffer = std::make_unique<char[]>(size + 1);
-
-        buffer[size] = '\0';
-
-        return buffer;
     }
 }

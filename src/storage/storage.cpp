@@ -2,6 +2,7 @@
 
 
 #include "storage_strategy/basic_storage_strategy.hpp"
+#include "storage_strategy/buffered_storage_strategy.hpp"
 
 #include <fstream>
 #include <fmt/format.h>
@@ -23,7 +24,7 @@ namespace cosmo::storage{
         _active_file_id = static_cast<data_file_id>(_data_files.size());
 
         _active_data_file_stream = ConcurrentFile{ directory_path / getActiveFileName() };
-        _store = std::make_unique<BasicStorageStrategy>();
+        _store = std::make_unique<BufferedStorageStrategy>(max_data_file_size);
 
         _active_file_size = static_cast<data_file_size>(fs::file_size(_active_data_file_stream.getPath()));
     }
@@ -37,16 +38,12 @@ namespace cosmo::storage{
     }
 
     void Storage::switchActiveDataFile() {
-        if (_active_file_size.load() >= _max_data_file_size) {
-            _active_file_id++;
-            auto old_active_file_path = _active_data_file_stream.getPath();
-            ConcurrentFile new_active_data_file_stream{ _storage_directory.path() / getActiveFileName() };
-            _active_data_file_stream = std::move(new_active_data_file_stream);
-            auto new_data_file_name = _storage_directory.path() / getDataFileName(_active_file_id);
-            fs::rename(old_active_file_path, new_data_file_name);
-            _data_files.emplace_back(new_data_file_name);
-            _active_file_size = 0;
-        }
+        auto old_active_file_path = _active_data_file_stream.getPath();
+        ConcurrentFile new_active_data_file_stream{ _storage_directory.path() / getActiveFileName() };
+        _active_data_file_stream = std::move(new_active_data_file_stream);
+        auto new_data_file_name = _storage_directory.path() / getDataFileName(_active_file_id - 1);
+        fs::rename(old_active_file_path, new_data_file_name);
+        _data_files.emplace_back(new_data_file_name);
     }
 
     std::string Storage::getActiveFileName() const {
