@@ -109,11 +109,14 @@ namespace cosmo::storage {
 			}
 			return *this;
 		}
-
 		
 		std::pair<bool, char*> read(offset_t offset, std::streamsize size) const {
 			return safeIoOperation([this, &size, &offset] {
 				auto buffer = _char_buffer.getBuffer(size);
+
+				if (!buffer) {
+					throw std::runtime_error("Unable to allocate buffer");
+				}
 
 				if(offset + size < _current_write_pos) {
 					readInternal(buffer, offset, size);
