@@ -11,7 +11,7 @@
 #include <memory>
 
 namespace cosmo::storage{
-    Storage::Storage(const fs::path& directory_path, data_file_size max_data_file_size):
+    Storage::Storage(const fs::path& directory_path, data_file_size_t max_data_file_size):
         _storage_directory{ directory_path }, _max_data_file_size{ max_data_file_size } {
 
         if (!_storage_directory.exists() || !_storage_directory.is_directory()) {
@@ -21,15 +21,15 @@ namespace cosmo::storage{
         _data_files.reserve(DEFAULT_MAX_DATA_FILE_NUMBER);
         auto existing_data_files = seachFiles(_storage_directory, DATAFILE_PREFIX);
         std::ranges::copy(existing_data_files, std::back_inserter(_data_files));
-        _active_file_id = static_cast<data_file_id>(_data_files.size());
+        _active_file_id = static_cast<data_file_id_t>(_data_files.size());
 
         _active_data_file_stream = ConcurrentFile{ directory_path / getActiveFileName() };
         _store = std::make_unique<BufferedStorageStrategy>(max_data_file_size);
 
-        _active_file_size = static_cast<data_file_size>(fs::file_size(_active_data_file_stream.getPath()));
+        _active_file_size = static_cast<data_file_size_t>(fs::file_size(_active_data_file_stream.getPath()));
     }
 
-    ReadResult Storage::read(data_file_id file_id, offset pos, data_file_size size) {
+    ReadResult Storage::read(data_file_id_t file_id, offset_t pos, data_file_size_t size) {
         return _store->read(*this, file_id, pos, size);
     }
 
@@ -50,7 +50,7 @@ namespace cosmo::storage{
         return fmt::format("{}_{}{}", ACTIVE_FILE_PREFIX, _active_file_id, FILE_EXTENSION);
     }
 
-    std::string Storage::getDataFileName(data_file_id id) const {
+    std::string Storage::getDataFileName(data_file_id_t id) const {
         return fmt::format("{}_{}{}", DATAFILE_PREFIX, id, FILE_EXTENSION);
     }
 };

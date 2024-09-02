@@ -32,7 +32,7 @@ public:
 };
 
 
-auto testRead(Storage& storage, cosmo::storage::data_file_id fileIndex, cosmo::storage::offset offset, cosmo::storage::data_file_size length, const std::string& expected) {
+auto testRead(Storage& storage, cosmo::storage::data_file_id_t fileIndex, cosmo::storage::offset_t offset, cosmo::storage::data_file_size_t length, const std::string& expected) {
     auto start = std::chrono::high_resolution_clock::now();
     auto [status, buffer] = storage.read(fileIndex, offset, length);
     auto end = std::chrono::high_resolution_clock::now();
@@ -140,14 +140,14 @@ TEST_F(CosmoTest, multipleFileRead)
 
     Storage storage{ directory };
 
-    cosmo::storage::data_file_id file1_id{};
-    cosmo::storage::data_file_id file2_id{};
-    cosmo::storage::data_file_id file3_id{};
+    cosmo::storage::data_file_id_t file1_id{};
+    cosmo::storage::data_file_id_t file2_id{};
+    cosmo::storage::data_file_id_t file3_id{};
 
     for (auto i = 0; i < storage.getDataFiles().size(); ++i) {
         auto& path = storage.getDataFiles().at(i);
 
-        auto id = static_cast<cosmo::storage::data_file_id>(i);
+        auto id = static_cast<cosmo::storage::data_file_id_t>(i);
 
         if (path.getPath() == file1.filePath) {
             file1_id = id;

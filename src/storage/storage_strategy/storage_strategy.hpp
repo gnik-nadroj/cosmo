@@ -8,7 +8,7 @@ namespace cosmo::storage {
 
 	class IStorageStrategy {
 		public:
-			virtual ReadResult read(Storage& storage, data_file_id file_id, offset pos, data_file_size size) = 0;
+			virtual ReadResult read(Storage& storage, data_file_id_t file_id, offset_t pos, data_file_size_t size) = 0;
 			virtual WriteResult write(Storage& storage, const std::string& value) = 0;
 
 			virtual ~IStorageStrategy() = default;

@@ -15,7 +15,7 @@ namespace cosmo::storage {
         }
 
         //will be improved to read from the _buffer id data is present in it.
-        ReadResult read(Storage& storage, data_file_id file_id, offset pos, data_file_size size) override {
+        ReadResult read(Storage& storage, data_file_id_t file_id, offset_t pos, data_file_size_t size) override {
             std::shared_lock lck{ _mtx };
 
             if (file_id == storage._active_file_id) {

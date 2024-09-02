@@ -16,133 +16,150 @@
 namespace fs = std::filesystem;
 
 namespace cosmo::storage {
-    using offset = std::fstream::pos_type;
-    using data_file_size = uint32_t;
-    using data_file_id = uint32_t;
+	using offset_t = std::streampos;
+	using data_file_size_t = uint32_t;
+	using data_file_id_t = uint32_t;
 
-    using ReadResult = std::pair<bool, char*>;
-    using WriteResult = std::tuple<bool, data_file_id, offset>;
+	using ReadResult = std::pair<bool, char*>;
+	using WriteResult = std::tuple<bool, data_file_id_t, offset_t>;
 
-    inline static const auto APPEND_READ = std::ios::app | std::ios::in;
+	inline static const auto APPEND_READ = std::ios::app | std::ios::in;
 
-    std::optional<fs::path> searchFile(const fs::directory_entry& directory, const std::string_view filename);
-    std::vector<fs::path> seachFiles(const fs::directory_entry& directory, const std::string_view filename);
+	std::optional<fs::path> searchFile(const fs::directory_entry& directory, const std::string_view filename);
+	std::vector<fs::path> seachFiles(const fs::directory_entry& directory, const std::string_view filename);
 
-    class CharBuffer {
-    private:
-        static inline std::mutex _mtx;
-        static inline size_t _size{ 1'000'000'000 };
-        static inline size_t _current_pos{};
-        static inline auto _buffer = std::make_unique<char[]>(_size);
+	template <typename Func, typename ReturnType = std::invoke_result_t<Func>>
+	std::pair<bool, ReturnType> safeIoOperation(Func func) {
+		try {
+			return { true, func() };
+		}
+		catch (const std::filesystem::filesystem_error& e) {
+			std::cerr << "Filesystem error: " << e.what() << '\n';
+		}
+		catch (const std::ios_base::failure& e) {
+			std::cerr << "I/O error: " << e.what() << '\n';
+		}
+		catch (const std::bad_alloc& e) {
+			std::cerr << "Memory allocation error: " << e.what() << '\n';
+		}
+		catch (const std::exception& e) {
+			std::cerr << "General error: " << e.what() << '\n';
+		}
+		return { false, ReturnType{} };
+	}
 
-    public:
-        static char* getBuffer(std::streamsize requestedSize) {
-            std::scoped_lock lck{ _mtx };
+	class CharBuffer {
+	private:
+		std::mutex _mtx;
+		uint32_t _size{ 1'000'000'000 };
+		std::unique_ptr<char[]> _buffer{};
+		uint32_t _current_pos{};
 
-            if (requestedSize > _size) {
-                throw std::runtime_error("Requested size is larger than buffer size");
-            }
+	public:
+		CharBuffer() : _buffer{ std::make_unique<char[]>(_size) } {};
+		explicit CharBuffer(uint32_t size) : _size{ size }, _buffer{ std::make_unique<char[]>(size) } {};
+		char* getBuffer(std::streamsize requestedSize) {
+			std::scoped_lock lck{ _mtx };
 
-            if (_current_pos + requestedSize >= _size) {
-                _current_pos = 0;
-            }
+			if (requestedSize > _size) {
+			   return nullptr;
+			}
 
-            char* start = &_buffer[_current_pos];
-            _buffer[_current_pos + requestedSize] = '\0';
-            _current_pos += requestedSize + 1;
+			if (_current_pos + requestedSize >= _size) {
+				_current_pos = 0;
+			}
 
-            return start;
-        }
-    };
+			char* start = &_buffer[_current_pos];
+			_buffer[_current_pos + requestedSize] = '\0';
+			_current_pos += requestedSize + 1;
 
-    template <typename Func, typename ReturnType = std::invoke_result_t<Func>>
-    std::pair<bool, ReturnType> safeIoOperation(Func func) {
-        try {
-            return { true, func() };
-        }
-        catch (const std::filesystem::filesystem_error& e) {
-            std::cerr << "Filesystem error: " << e.what() << '\n';
-        }
-        catch (const std::ios_base::failure& e) {
-            std::cerr << "I/O error: " << e.what() << '\n';
-        }
-        catch (const std::bad_alloc& e) {
-            std::cerr << "Memory allocation error: " << e.what() << '\n';
-        }
-        catch (const std::exception& e) {
-            std::cerr << "General error: " << e.what() << '\n';
-        }
-        return { false, ReturnType{} };
-    }
+			return start;
+		}
+	};
 
-    class ConcurrentFile {
-    public:
-        ConcurrentFile() = default;
+	class ConcurrentFile {
+	public:
+		ConcurrentFile() = default;
 
-        ~ConcurrentFile() = default;
+		~ConcurrentFile() = default;
 
-        ConcurrentFile(const ConcurrentFile&) = delete;
-        ConcurrentFile& operator=(const ConcurrentFile&) = delete;
+		ConcurrentFile(const ConcurrentFile&) = delete;
+		ConcurrentFile& operator=(const ConcurrentFile&) = delete;
 
-        ConcurrentFile(const fs::path& filePath, std::ios_base::openmode mode = APPEND_READ)
-            : _writer{ filePath, mode }, _file_path{ filePath } {
-            if (!_writer.is_open()) {
-                throw std::invalid_argument("Unable to in file");
-            }
-        }
+		ConcurrentFile(const fs::path& filePath, std::ios_base::openmode mode = APPEND_READ)
+			: _writer{ filePath, mode }, _file_path{ filePath } {
+			if (!_writer.is_open()) {
+				throw std::invalid_argument("Unable to in file");
+			}
+		}
 
-        ConcurrentFile(ConcurrentFile&& other) noexcept {
-            std::scoped_lock lock{ _write_mtx, other._write_mtx };
-            _file_path = std::move(other._file_path);
-            _writer = std::move(other._writer);
-        }
+		ConcurrentFile(ConcurrentFile&& other) noexcept {
+			std::scoped_lock lock{ _mtx, other._mtx };
+			_file_path = std::move(other._file_path);
+			_writer = std::move(other._writer);
+		}
 
-        ConcurrentFile& operator=(ConcurrentFile&& other) noexcept {
-            if (this != &other) {
-                std::scoped_lock lock{ _write_mtx, other._write_mtx };
-                _file_path = std::move(other._file_path);
-                _writer = std::move(other._writer);
-            }
-            return *this;
-        }
+		ConcurrentFile& operator=(ConcurrentFile&& other) noexcept {
+			if (this != &other) {
+				std::scoped_lock lock{ _mtx, other._mtx };
+				_file_path = std::move(other._file_path);
+				_writer = std::move(other._writer);
+			}
+			return *this;
+		}
 
-        std::pair<bool, char*> read(std::fstream::pos_type offset, std::streamsize size) const {
-            return safeIoOperation([this, &size, &offset] {
-                auto buffer = CharBuffer::getBuffer(size);
+		
+		std::pair<bool, char*> read(offset_t offset, std::streamsize size) const {
+			return safeIoOperation([this, &size, &offset] {
+				auto buffer = _char_buffer.getBuffer(size);
 
-                std::ifstream reader {_file_path, std::ios::in};
+				if(offset + size < _current_write_pos) {
+					readInternal(buffer, offset, size);
+				} else {
+					std::shared_lock lck{ _mtx };
+					readInternal(buffer, offset, size);
+				}
+				
+				return buffer;
+			});
+		}
 
-                reader.seekg(offset);
+		std::pair<bool, offset_t> write(const char* value, std::streamsize size) {
+			return safeIoOperation([this, &value, &size] {
+				std::scoped_lock lck{ _mtx };
 
-                reader.read(buffer, size);
+				auto pos = _writer.tellp();
+				
+				_writer.write(value, size);
 
-                return buffer;
-            });
-        }
+				_current_write_pos = static_cast<uint32_t>(_writer.tellp());
 
-        std::pair<bool, std::fstream::pos_type> write(const char* value, std::streamsize size) {
-            return safeIoOperation([this, &value, &size] {
-                std::scoped_lock lck{ _write_mtx };
+				return pos;
+			});
+		}
 
-                auto pos = _writer.tellp();
-                
-                _writer.write(value, size);
+		bool isOpen() const {
+			return _writer.is_open();
+		}
 
-                return pos;
-            });
-        }
+		const fs::path& getPath() const {
+			return _file_path;
+		}
 
-        bool isOpen() const {
-            return _writer.is_open();
-        }
+	private:
+		std::fstream _writer{};
+		fs::path _file_path{};
+		std::fstream::pos_type _current_write_pos{};
+		mutable std::shared_mutex _mtx;
 
-        const fs::path& getPath() const {
-            return _file_path;
-        }
+		inline static CharBuffer _char_buffer{};
 
-    private:
-        std::fstream _writer{};
-        std::mutex _write_mtx;
-        fs::path _file_path{};
-    };
+		void readInternal(char* buffer, offset_t offset, std::streamsize size) const {
+			std::ifstream reader{ _file_path, std::ios::in };
+
+			reader.seekg(offset);
+
+			reader.read(buffer, size);
+		}
+	};
 }
