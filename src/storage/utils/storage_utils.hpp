@@ -87,10 +87,12 @@ namespace cosmo::storage {
 		ConcurrentFile& operator=(const ConcurrentFile&) = delete;
 
 		ConcurrentFile(const fs::path& filePath, std::ios_base::openmode mode = APPEND_READ)
-			: _writer{ filePath, mode }, _file_path{ filePath } {
+			: _file_path{ filePath }, _writer{ filePath, mode } { 
 			if (!_writer.is_open()) {
 				throw std::invalid_argument("Unable to in file");
 			}
+
+			_current_write_pos = _writer.tellp();
 		}
 
 		ConcurrentFile(ConcurrentFile&& other) noexcept {
@@ -128,11 +130,11 @@ namespace cosmo::storage {
 			return safeIoOperation([this, &value, &size] {
 				std::scoped_lock lck{ _mtx };
 
-				auto pos = _writer.tellp();
+				auto pos = _current_write_pos;
 				
 				_writer.write(value, size);
 
-				_current_write_pos = static_cast<uint32_t>(_writer.tellp());
+				_current_write_pos = _writer.tellp();
 
 				return pos;
 			});
@@ -147,9 +149,9 @@ namespace cosmo::storage {
 		}
 
 	private:
-		std::fstream _writer{};
 		fs::path _file_path{};
-		std::fstream::pos_type _current_write_pos{};
+		offset_t _current_write_pos{};
+		std::fstream _writer{};
 		mutable std::shared_mutex _mtx;
 
 		inline static CharBuffer _char_buffer{};
